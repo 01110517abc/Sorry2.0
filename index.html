@@ -1,0 +1,251 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>對不起大作戰 💌</title>
+<style>
+:root{--bg:#ffe4ec;--card:#fff;--text:#4a2833;--accent:#ff5c8a;--soft:#ffc2d4;box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){--bg:#2a1620;--card:#3a202c;--text:#ffe9f0;--accent:#ff7da1;--soft:#6b3446}}
+:root[data-theme="dark"]{--bg:#2a1620;--card:#3a202c;--text:#ffe9f0;--accent:#ff7da1;--soft:#6b3446}
+*{box-sizing:border-box}
+html,body{height:100%;margin:0}
+body{background:var(--bg);color:var(--text);font-family:"PingFang TC","Microsoft JhengHei",sans-serif;display:flex;align-items:center;justify-content:center;overflow:hidden}
+#game{position:relative;width:100%;max-width:480px;height:100%;max-height:760px;padding:20px;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;overflow:hidden}
+.card{background:var(--card);border-radius:24px;padding:28px 22px;width:100%;box-shadow:0 8px 24px rgba(255,92,138,.25);position:relative;z-index:2;max-height:100%;overflow-y:auto}
+h1{margin:0 0 8px;font-size:28px}
+p{line-height:1.7;margin:8px 0}
+button{font:inherit;font-size:17px;border:0;border-radius:999px;padding:12px 26px;margin:6px;background:var(--accent);color:#fff;cursor:pointer}
+button.alt{background:var(--soft);color:var(--text)}
+.big{font-size:64px}
+#hud{position:absolute;top:12px;left:0;right:0;font-size:17px;z-index:5;pointer-events:none;line-height:1.6}
+.heart{position:absolute;top:-70px;cursor:pointer;user-select:none;touch-action:none;animation:fall linear forwards}
+@keyframes fall{to{transform:translate(var(--dx),900px) rotate(40deg)}}
+.opt{display:block;width:100%;margin:8px 0;text-align:left;border-radius:16px}
+#msg{min-height:28px;color:var(--accent);font-weight:bold}
+#letter{text-align:left;white-space:pre-wrap;font-size:15px;line-height:1.7}
+#btns{position:relative;height:120px;width:100%}
+#no{position:absolute}
+.pop{position:fixed;font-size:30px;pointer-events:none;animation:up 2s ease-out forwards}
+@keyframes up{to{transform:translateY(-110vh) rotate(40deg);opacity:0}}
+.bar{height:22px;background:var(--soft);border-radius:99px;overflow:hidden;width:100%;margin:12px 0}
+.bar>div{height:100%;width:0;background:var(--accent);transition:width .1s}
+.dis{position:absolute;font-size:46px;cursor:pointer;z-index:4;user-select:none;animation:wob .4s infinite alternate}
+@keyframes wob{to{transform:rotate(14deg) scale(1.15)}}
+.grid{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-top:10px}
+.cd{aspect-ratio:1;border-radius:14px;background:var(--soft);display:flex;align-items:center;justify-content:center;font-size:34px;cursor:pointer;user-select:none}
+.cd.on{background:var(--card);border:2px solid var(--accent)}
+.cd.ok{background:var(--card);opacity:.55}
+</style>
+</head>
+<body>
+<div id="game"></div>
+<script>
+/* ============ ✏️ 想改文字，只要改這一區就可以了 ============ */
+const CONFIG = {
+  his:  "寶貝",
+  mine: "你的小笨蛋",
+  quiz: [
+    { q: "我可愛嗎？🥺",
+      a: ["不可愛 😐", "可愛 🥰", "普通啦 🤷", "我再想想 🤔"],
+      right: 1, wrong: "答錯了！請重新回答～ 😤" },
+    { q: "再問一次，我可愛嗎？✨",
+      a: ["可愛 💖", "還好吧 😏", "不告訴你 🙈"],
+      right: 0, wrong: "嗯？你再說一次？ 🔪" },
+    { q: "最後一次，我是不是全世界最可愛的？🌍",
+      a: ["我要去睡覺了 😴", "不說話 🤐", "是！超級無敵可愛 🥹"],
+      right: 2, wrong: "這題不能跳過喔～ 💢" }
+  ],
+  letter:
+`親愛的 {his}：
+
+今天我們在講電話，
+你正認真地跟我說話，
+我的朋友剛好來找我，
+我卻把你丟在電話那一頭，跑去跟朋友聊天。
+
+你一定覺得自己不被重視、被冷落了，
+我真的很對不起。
+
+後來我的態度也不好，
+明明是我做錯了，
+卻沒有好好跟你說話，
+讓你比當時更難過。
+
+以後，我會先跟朋友說
+我正在跟你打電話，
+不會放著你不管。
+
+謝謝你一直包容我，
+我真的很愛你。
+
+—— {mine}`,
+  happy: "耶！謝謝你原諒我 💖\n我保證以後一定專心聽你說話！\n今晚想吃什麼？我請客！"
+};
+/* ============ 以下是遊戲程式，不用改 ============ */
+const G = document.getElementById("game");
+const fill = s => s.replace(/{his}/g, CONFIG.his).replace(/{mine}/g, CONFIG.mine);
+let timer, timer2;
+const stopAll = () => { clearInterval(timer); clearInterval(timer2); };
+const rnd = (a, b) => a + Math.random() * (b - a);
+function fail(text, retry){
+  stopAll();
+  G.innerHTML = `<div class="card"><div class="big">🥲</div><h1>差一點點！</h1><p>${text}</p><button id="r">再試一次</button></div>`;
+  document.getElementById("r").onclick = retry;
+}
+function cardScreen(emoji, h, p, btn, next){
+  G.innerHTML = `<div class="card"><div class="big">${emoji}</div><h1>${h}</h1><p>${p}</p><button id="n">${btn}</button></div>`;
+  document.getElementById("n").onclick = next;
+}
+
+function title(){
+  cardScreen("🥺", "對不起大作戰", `給 ${CONFIG.his} 的道歉小遊戲<br>共五關，請多多指教～`, "開始", level1);
+}
+
+/* 第 1 關：接愛心（有生命、會搖擺、有陷阱） */
+function level1(){
+  stopAll();
+  let score = 0, lives = 5, over = false; const goal = 8;
+  G.innerHTML = `<div id="hud"></div>`;
+  const hud = document.getElementById("hud");
+  const upd = () => hud.innerHTML = `第 1 關：接住我的愛心<br>💗 ${score} / ${goal}<br><small>點愛心就對了，掉了也沒關係 😊</small>`;
+  upd();
+  const lose = () => { if (!over){ over = true; fail("愛心掉太多了，或是點到討厭的東西了～", level1); } };
+  timer = setInterval(() => {
+    if (over) return;
+    const r = Math.random();
+    const type = r < .75 ? "💗" : r < .95 ? "💛" : "💢";
+    const good = type === "💗" || type === "💛";
+    const h = document.createElement("div");
+    h.className = "heart"; h.textContent = type;
+    h.style.fontSize = rnd(58, 72) + "px";
+    h.style.left = rnd(0, G.clientWidth - 60) + "px";
+    h.style.setProperty("--dx", rnd(-15, 15) + "px");
+    h.style.animationDuration = rnd(5.5, 7) + "s";
+    let hitDone = false;
+    h.addEventListener("pointerdown", e => {
+      e.preventDefault(); if (over || hitDone) return; hitDone = true; h.remove();
+      if (type === "💛") score += 3; else if (type === "💗") score++; else { score = Math.max(0, score - 2); }
+      upd();
+      if (score >= goal){ over = true; stopAll(); cardScreen("🎉", "第 1 關通過！", "愛心接得很棒～", "下一關", level2); }
+    });
+    h.addEventListener("animationend", () => {
+      
+      h.remove();
+    });
+    G.appendChild(h);
+  }, 900);
+}
+
+/* 第 2 關：可愛問答 */
+function level2(){
+  let i = 0;
+  const show = () => {
+    const item = CONFIG.quiz[i];
+    G.innerHTML = `<div class="card"><p>第 2 關：我可愛嗎？🐰（${i + 1} / ${CONFIG.quiz.length}）</p>
+      <h1 style="font-size:21px">${item.q}</h1><div id="opts"></div><p id="msg"></p></div>`;
+    item.a.forEach((t, k) => {
+      const b = document.createElement("button");
+      b.className = "opt alt"; b.textContent = t;
+      b.onclick = () => {
+        if (k === item.right){ i++; i < CONFIG.quiz.length ? show() : cardScreen("🎉", "第 2 關通過！", "答對了，我就知道你最誠實～", "下一關", level3); }
+        else document.getElementById("msg").textContent = item.wrong;
+      };
+      document.getElementById("opts").appendChild(b);
+    });
+  };
+  show();
+}
+
+/* 第 3 關：專心聽他說話（趕走干擾） */
+function level3(){
+  stopAll();
+  let focus = 0, done = false;
+  G.innerHTML = `<div id="hud">第 3 關：專心聽他說話！<br><small>趕快點掉會讓人分心的東西</small></div>
+    <div class="card"><div class="big">🧸💬</div><p>「我今天呀，跟你說喔……」</p>
+    <div class="bar"><div id="fb"></div></div><p>專注度</p></div>`;
+  const fb = document.getElementById("fb");
+  timer = setInterval(() => {
+    if (done) return;
+    focus = Math.min(100, focus + 0.7);
+    fb.style.width = focus + "%";
+    if (focus >= 100){ done = true; stopAll(); cardScreen("🎉", "第 3 關通過！", "這次有好好聽他說完了～", "下一關", level4); }
+  }, 100);
+  timer2 = setInterval(() => {
+    if (done) return;
+    const d = document.createElement("div");
+    d.className = "dis"; d.textContent = ["📱", "💬", "👯", "🎮", "🍟"][Math.floor(rnd(0, 5))];
+    d.style.left = rnd(10, G.clientWidth - 70) + "px";
+    d.style.top = rnd(70, G.clientHeight - 90) + "px";
+    let cleared = false;
+    d.addEventListener("pointerdown", e => { e.preventDefault(); cleared = true; d.remove(); });
+    setTimeout(() => { if (!cleared && !done){ focus = Math.max(0, focus - 14); } d.remove(); }, 1500);
+    G.appendChild(d);
+  }, 900);
+}
+
+/* 第 4 關：記憶配對 */
+function level4(){
+  stopAll();
+  const faces = ["🐻", "🐰", "🍓", "🧋"];
+  const cards = [...faces, ...faces].sort(() => Math.random() - .5);
+  G.innerHTML = `<div class="card"><p>第 4 關：我們的小默契 🧸<br><small>找出所有一樣的圖案</small></p><div class="grid" id="gr"></div></div>`;
+  const gr = document.getElementById("gr");
+  let open = [], lock = false, matched = 0;
+  cards.forEach(f => {
+    const c = document.createElement("div"); c.className = "cd"; c.textContent = "❓";
+    c.onclick = () => {
+      if (lock || c.classList.contains("on") || c.classList.contains("ok")) return;
+      c.classList.add("on"); c.textContent = f; open.push(c);
+      if (open.length === 2){
+        lock = true;
+        if (open[0].textContent === open[1].textContent){
+          open.forEach(x => { x.classList.remove("on"); x.classList.add("ok"); });
+          open = []; lock = false; matched++;
+          if (matched === faces.length) setTimeout(() => cardScreen("🎉", "第 4 關通過！", "默契滿分～接下來是最後一關", "最後一關", level5), 500);
+        } else setTimeout(() => { open.forEach(x => { x.classList.remove("on"); x.textContent = "❓"; }); open = []; lock = false; }, 800);
+      }
+    };
+    gr.appendChild(c);
+  });
+}
+
+/* 第 5 關：道歉信 + 逃跑的「不原諒」 */
+function level5(){
+  G.innerHTML = `<div class="card"><p>最後一關：寫給你的信 💌</p>
+    <div id="letter"></div>
+    <div id="btns" style="display:none"><button id="yes">原諒我 🥺</button><button id="no" class="alt">不原諒</button></div></div>`;
+  const text = fill(CONFIG.letter); const box = document.getElementById("letter"); let n = 0;
+  const t = setInterval(() => {
+    box.textContent = text.slice(0, ++n);
+    box.parentElement.scrollTop = 1e5;
+    if (n >= text.length){ clearInterval(t); document.getElementById("btns").style.display = "block"; setupBtns(); box.parentElement.scrollTop = 1e5; }
+  }, 40);
+}
+function setupBtns(){
+  const no = document.getElementById("no"), wrap = document.getElementById("btns");
+  no.style.left = "45%";
+  const run = e => {
+    e.preventDefault();
+    no.style.left = rnd(0, wrap.clientWidth - no.offsetWidth) + "px";
+    no.style.top = rnd(0, wrap.clientHeight - no.offsetHeight) + "px";
+  };
+  no.addEventListener("pointerenter", run);
+  no.addEventListener("pointerdown", run);
+  document.getElementById("yes").onclick = win;
+}
+function win(){
+  G.innerHTML = `<div class="card"><div class="big">🥰</div><h1>原諒成功！</h1>
+    <p>${CONFIG.happy.replace(/\n/g, "<br>")}</p><button id="again" class="alt">再玩一次</button></div>`;
+  document.getElementById("again").onclick = title;
+  for (let k = 0; k < 40; k++) setTimeout(() => {
+    const p = document.createElement("div");
+    p.className = "pop"; p.textContent = ["💖", "💗", "💕", "🌸"][k % 4];
+    p.style.left = Math.random() * 95 + "vw"; p.style.bottom = "-40px";
+    document.body.appendChild(p); setTimeout(() => p.remove(), 2000);
+  }, k * 80);
+}
+title();
+</script>
+</body>
+</html>
